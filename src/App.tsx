@@ -5,15 +5,36 @@ import { loginToPocketBase } from "./pocketbase";
 import { LeaderboardManagerData } from "./types";
 import { formatNumber } from "./lib/utils";
 import { Medal } from "./components/Medal";
-import { MotivationElements } from "./components/MotivationElements";
+import { MonthCalendar } from "./components/MonthCalendar";
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+
   const { startDate, endDate } = useMemo(() => {
     const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
-    return { startDate: start, endDate: now };
-  }, []);
+    const start = new Date(
+      selectedMonth.getFullYear(),
+      selectedMonth.getMonth(),
+      1
+    );
+
+    // Если выбран текущий месяц, то end = сегодня, иначе = конец месяца
+    const end =
+      selectedMonth.getMonth() === now.getMonth() &&
+      selectedMonth.getFullYear() === now.getFullYear()
+        ? now
+        : new Date(
+            selectedMonth.getFullYear(),
+            selectedMonth.getMonth() + 1,
+            0
+          );
+
+    return { startDate: start, endDate: end };
+  }, [selectedMonth]);
 
   const {
     data: managersLeaderboard,
@@ -43,15 +64,11 @@ function App() {
   // Показываем загрузку во время входа
   if (!isLoggedIn || managersLoading) {
     return (
-      <main className="container">
-        <div className="p-8">
-          <h1 className="text-3xl font-bold mb-4">Загрузка данных...</h1>
-          <div className="animate-pulse">
-            <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
-            <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-          </div>
+      <div className="min-h-screen w-full bg-gradient-to-br from-blue-50/70 via-white/60 to-purple-50/30 backdrop-blur-sm flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-14 w-14 border-2 border-gray-300 border-t-blue-600 mb-4"></div>
         </div>
-      </main>
+      </div>
     );
   }
 
@@ -70,32 +87,55 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-blue-50 via-white to-purple-50">
+    <div className="min-h-screen w-full bg-gradient-to-br from-blue-50/70 via-white/60 to-purple-50/30 backdrop-blur-sm">
       <main className="container mx-auto">
         <div className="p-2">
           <div className="mb-3 text-center">
             <h1 className="text-2xl font-bold mb-1 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
               🏆 Лидерборд
             </h1>
-            <div className="flex gap-2 items-center justify-center">
-              <p className="text-xs text-gray-600">Лучшие менеджеры месяца</p>
+            <div className="flex gap-2 items-center justify-center flex-wrap">
+              <p className="text-xs text-gray-600">Результаты</p>
+              <p className="text-xs font-bold text-gray-800">
+                {selectedMonth.toLocaleDateString("ru-RU", {
+                  month: "short",
+                  year: "numeric",
+                })}
+              </p>
+              <p className="text-xs text-gray-500">•</p>
               <p className="text-xs font-bold text-gray-800">
                 {managersLeaderboard.length}
               </p>
-              <p className="text-xs text-gray-500">участ.</p>
+              <p className="text-xs text-gray-500">менеджеров</p>
             </div>
           </div>
 
           {new Date().getDate() <= 3 &&
+            selectedMonth.getMonth() === new Date().getMonth() &&
+            selectedMonth.getFullYear() === new Date().getFullYear() &&
             managersLeaderboard.some((m) =>
               m.managerId.startsWith("mock-")
             ) && (
-              <div className="mb-3 p-2 bg-gradient-to-r from-yellow-50 to-orange-50 border border-yellow-200 rounded-lg">
+              <div className="mb-3 p-2 bg-gradient-to-r from-yellow-50/80 to-orange-50/80 backdrop-blur-sm border border-yellow-200/60 rounded-lg">
                 <div className="flex items-center gap-2">
                   <span className="text-base">📊</span>
                   <div>
                     <p className="text-xs font-medium text-yellow-800">
                       Демо-данные начнут обновляться
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+          {!managersLeaderboard.some((m) => m.managerId.startsWith("mock-")) &&
+            managersLeaderboard.length === 0 && (
+              <div className="mb-3 p-2 bg-gray-50/80 backdrop-blur-sm border border-gray-200/60 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">📋</span>
+                  <div>
+                    <p className="text-xs font-medium text-gray-700">
+                      Нет данных за выбранный период
                     </p>
                   </div>
                 </div>
@@ -108,7 +148,7 @@ function App() {
               {managersLeaderboard.slice(0, 3).map((manager, index) => (
                 <div
                   key={manager.managerId}
-                  className={`relative bg-white rounded-lg shadow-md overflow-hidden border ${
+                  className={`relative bg-white/70 backdrop-blur-sm rounded-lg shadow-md/50 overflow-hidden border ${
                     manager.rank === 1
                       ? "border-yellow-400 border-2"
                       : manager.rank === 2
@@ -181,20 +221,22 @@ function App() {
 
           {/* Остальные участники - компактная таблица */}
           {managersLeaderboard && managersLeaderboard.length > 3 && (
-            <div className="bg-white rounded-lg shadow-md overflow-hidden">
-              <div className="bg-gray-50 px-3 py-2 border-b">
+            <div className="bg-white/70 backdrop-blur-sm rounded-lg shadow-md/50 overflow-hidden">
+              <div className="bg-gray-50/80 backdrop-blur-sm px-3 py-2 border-b border-gray-200/60">
                 <h3 className="text-sm font-semibold text-gray-700">
-                  📋 Остальные участники
+                  📋 Остальные менеджеры
                 </h3>
               </div>
-              <div className="divide-y divide-gray-100">
+              <div className="divide-y divide-gray-100/60">
                 {managersLeaderboard
                   .slice(3)
                   .map((manager: LeaderboardManagerData) => (
                     <div
                       key={manager.managerId}
                       className={`px-3 py-2 ${
-                        manager.isCurrentUser ? "bg-green-50/50" : ""
+                        manager.isCurrentUser
+                          ? "bg-green-50/70 backdrop-blur-sm"
+                          : ""
                       }`}
                     >
                       <div className="flex items-center justify-between">
@@ -230,6 +272,15 @@ function App() {
               </div>
             </div>
           )}
+
+          {/* Календарь выбора месяца */}
+          <div className="mt-4">
+            <MonthCalendar
+              selectedDate={selectedMonth}
+              onDateChange={setSelectedMonth}
+              isLoading={managersLoading}
+            />
+          </div>
         </div>
       </main>
     </div>

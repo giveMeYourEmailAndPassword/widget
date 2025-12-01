@@ -215,12 +215,14 @@ export const useManagersLeaderboard = (
         isCurrentUser: false,
       }));
 
-    // Если данных нет или месяц новый (1-3 дня месяца), возвращаем заглушку
+    // Если данных нет и это текущий месяц (1-3 дня), возвращаем заглушку
     const now = new Date();
     const currentDay = now.getDate();
     const hasRealData = sorted.length > 0;
+    const isCurrentMonth = (startDate.getMonth() === now.getMonth() &&
+                           startDate.getFullYear() === now.getFullYear());
 
-    if (!hasRealData && currentDay <= 3) {
+    if (!hasRealData && isCurrentMonth && currentDay <= 3) {
       // Временные тестовые данные для нового месяца
       const mockData = [
         {
