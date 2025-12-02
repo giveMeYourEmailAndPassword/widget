@@ -3,7 +3,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useManagersLeaderboard } from "./api";
 import { loginToPocketBase } from "./pocketbase";
 import { LeaderboardManagerData } from "./types";
-import { formatNumber } from "./lib/utils";
+import { formatNumber, contractWord } from "./lib/utils";
 import { Medal } from "./components/Medal";
 import { MonthCalendar } from "./components/MonthCalendar";
 
@@ -184,7 +184,7 @@ function App() {
                           ${formatNumber(manager.totalCommissionUSD)}
                         </p>
                         <p className="text-xs text-gray-500">
-                          {manager.contractCount} контрактов
+                          {manager.contractCount} {contractWord(manager.contractCount)}
                         </p>
                       </div>
                     </div>
@@ -263,7 +263,7 @@ function App() {
                             ${formatNumber(manager.totalCommissionUSD)}
                           </p>
                           <p className="text-xs text-gray-500">
-                            {manager.contractCount} контрактов
+                            {manager.contractCount} {contractWord(manager.contractCount)}
                           </p>
                         </div>
                       </div>
