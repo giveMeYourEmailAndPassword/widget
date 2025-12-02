@@ -37,6 +37,7 @@ function App() {
     type: "warning" | "info" | "error";
     message: string;
   } | null>(null);
+  const [showFullList, setShowFullList] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -141,6 +142,42 @@ function App() {
     return null;
   }, [currentUserInTop3, currentUserId, currentUserStats, combinedLeaderboard]);
 
+  // Фильтруем список для отображения
+  const visibleLeaderboard = useMemo(() => {
+    if (
+      !combinedLeaderboard ||
+      !currentUserId ||
+      showFullList ||
+      currentUserInTop3
+    ) {
+      return combinedLeaderboard;
+    }
+
+    const currentUserIndex = combinedLeaderboard.findIndex(
+      (m) => m.isCurrentUser
+    );
+    if (currentUserIndex === -1) {
+      return combinedLeaderboard;
+    }
+
+    // Показываем топ-3 + текущего пользователя + 2 человека ниже и выше
+    const top3 = combinedLeaderboard.slice(0, 3);
+    const currentUser = combinedLeaderboard[currentUserIndex];
+    const aroundCurrentUser = combinedLeaderboard.slice(
+      Math.max(0, currentUserIndex - 2),
+      Math.min(combinedLeaderboard.length, currentUserIndex + 3)
+    );
+
+    // Объединяем и убираем дубликаты
+    const allVisible = [...top3, ...aroundCurrentUser];
+    return allVisible
+      .filter(
+        (manager, index, self) =>
+          index === self.findIndex((m) => m.managerId === manager.managerId)
+      )
+      .sort((a, b) => a.rank - b.rank);
+  }, [combinedLeaderboard, currentUserId, showFullList, currentUserInTop3]);
+
   // Автоматический вход при загрузке приложения
   useEffect(() => {
     const initializeApp = async () => {
@@ -208,7 +245,7 @@ function App() {
         // Показываем уведомление о том, что пользователь не найден
         setNotification({
           type: "warning",
-          message: `Профиль "${nickname}" не найден в системе. Возможно, у вас пока нет контрактов или ник указан неверно.`,
+          message: `Профиль "${nickname}" не найден в системе. Возможно, у вас пока нет сделок или ник указан неверно.`,
         });
       }
     } catch (error) {
@@ -261,9 +298,9 @@ function App() {
   // Показываем загрузку во время входа
   if (!isLoggedIn || managersLoading) {
     return (
-      <div className="min-h-screen w-full bg-gradient-to-br from-blue-50/70 via-white/60 to-purple-50/30 backdrop-blur-sm flex items-center justify-center">
+      <div className="min-h-screen w-full bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-14 w-14 border-2 border-gray-300 border-t-blue-600 mb-4"></div>
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-gray-300 border-t-gray-600"></div>
         </div>
       </div>
     );
@@ -284,290 +321,200 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-blue-50/70 via-white/60 to-purple-50/30 backdrop-blur-sm">
-      <main className="container mx-auto">
+    <div className="min-h-screen w-full bg-gray-50/50">
+      <main className="container mx-auto max-w-md">
         <div className="p-2">
-          <div className="mb-3 text-center">
-            <h1 className="text-2xl font-bold mb-1 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-              🏆 Лидерборд
-            </h1>
-            <div className="flex gap-2 items-center justify-center flex-wrap">
-              <p className="text-xs text-gray-600">Результаты</p>
-              <p className="text-xs font-bold text-gray-800">
-                {selectedMonth.toLocaleDateString("ru-RU", {
-                  month: "short",
-                  year: "numeric",
-                })}
-              </p>
-              <p className="text-xs text-gray-500">•</p>
-              <p className="text-xs font-bold text-gray-800">
-                {combinedLeaderboard.length}
-              </p>
-              <p className="text-xs text-gray-500">менеджеров</p>
-            </div>
-          </div>
-
           {/* Уведомление пользователю */}
           {notification && (
-            <div
-              className={`mb-3 p-2 backdrop-blur-sm border rounded-lg ${
-                notification.type === "warning"
-                  ? "bg-yellow-50/80 border-yellow-200/60"
-                  : notification.type === "error"
-                  ? "bg-red-50/80 border-red-200/60"
-                  : "bg-blue-50/80 border-blue-200/60"
-              }`}
-            >
+            <div className="mb-3 p-2 bg-gray-50/80 backdrop-blur-sm border border-gray-200/60 rounded-lg">
               <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-base">
-                    {notification.type === "warning"
-                      ? "⚠️"
-                      : notification.type === "error"
-                      ? "❌"
-                      : "ℹ️"}
-                  </span>
-                  <div>
-                    <p
-                      className={`text-xs font-medium ${
-                        notification.type === "warning"
-                          ? "text-yellow-800"
-                          : notification.type === "error"
-                          ? "text-red-800"
-                          : "text-blue-800"
-                      }`}
-                    >
-                      {notification.message}
-                    </p>
-                  </div>
+                <div>
+                  <p className="text-xs text-gray-700">
+                    {notification.message}
+                  </p>
                 </div>
                 <button
                   onClick={() => setNotification(null)}
-                  className="text-xs font-medium text-gray-500 hover:text-gray-700"
+                  className="text-xs text-gray-500 hover:text-gray-700"
                 >
-                  ✕
+                  ×
                 </button>
               </div>
             </div>
           )}
 
-          {new Date().getDate() <= 3 &&
-            selectedMonth.getMonth() === new Date().getMonth() &&
-            selectedMonth.getFullYear() === new Date().getFullYear() &&
-            combinedLeaderboard.some((m) =>
-              m.managerId.startsWith("mock-")
-            ) && (
-              <div className="mb-3 p-2 bg-gradient-to-r from-yellow-50/80 to-orange-50/80 backdrop-blur-sm border border-yellow-200/60 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <span className="text-base">📊</span>
-                  <div>
-                    <p className="text-xs font-medium text-yellow-800">
-                      Демо-данные начнут обновляться
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
           {!combinedLeaderboard.some((m) => m.managerId.startsWith("mock-")) &&
             combinedLeaderboard.length === 0 && (
-              <div className="mb-3 p-2 bg-gray-50/80 backdrop-blur-sm border border-gray-200/60 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <span className="text-base">📋</span>
-                  <div>
-                    <p className="text-xs font-medium text-gray-700">
-                      Нет данных за выбранный период
-                    </p>
-                  </div>
-                </div>
+              <div className="mb-3 p-2 text-center text-xs text-gray-500">
+                Нет данных за выбранный период
               </div>
             )}
 
-          {/* Топ-3 карточки - вертикальные */}
+          {/* Все менеджеры */}
           {combinedLeaderboard && combinedLeaderboard.length > 0 && (
-            <div className="space-y-2 mb-4">
-              {combinedLeaderboard.slice(0, 3).map((manager) => (
-                <div
-                  key={manager.managerId}
-                  className={`relative bg-white/70 backdrop-blur-sm rounded-lg shadow-md/50 overflow-hidden border ${
-                    manager.rank === 1
-                      ? "border-yellow-400 border-2"
-                      : manager.rank === 2
-                      ? "border-gray-300"
-                      : manager.rank === 3
-                      ? "border-orange-300"
-                      : manager.isCurrentUser
-                      ? "border-green-400 border-2"
-                      : "border-gray-200"
-                  }`}
-                >
-                  <div
-                    className={`h-1 bg-gradient-to-r ${
-                      manager.rank === 1
-                        ? "from-yellow-400 to-yellow-600"
-                        : manager.rank === 2
-                        ? "from-gray-300 to-gray-500"
-                        : manager.rank === 3
-                        ? "from-orange-300 to-orange-500"
-                        : manager.isCurrentUser
-                        ? "from-green-400 to-green-600"
-                        : "from-gray-200 to-gray-400"
-                    }`}
-                  ></div>
-
-                  <div className="p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <Medal rank={manager.rank} size="medium" />
-                        <div>
-                          <h3 className="text-sm font-semibold text-gray-800">
-                            {manager.managerName}{" "}
-                            {manager.isCurrentUser && (
-                              <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded">
-                                ✨ Вы
-                              </span>
-                            )}
-                          </h3>
-                          <p className="text-xs text-gray-500">
-                            {manager.officeName}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-base font-bold text-gray-800">
-                          ${formatNumber(manager.totalCommissionUSD)}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {manager.contractCount}{" "}
-                          {contractWord(manager.contractCount)}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div className="text-xs">
-                        {manager.rank === 1 && (
-                          <span className="text-yellow-600 font-medium">
-                            🔥 Чемпион
-                          </span>
-                        )}
-                        {manager.rank === 2 && (
-                          <span className="text-gray-600 font-medium">
-                            💪 Почти цель
-                          </span>
-                        )}
-                        {manager.rank === 3 && (
-                          <span className="text-orange-600 font-medium">
-                            🎯 Отлично
-                          </span>
-                        )}
-                        {manager.isCurrentUser && manager.rank > 3 && (
-                          <span className="text-green-600 font-medium">
-                            📊 Ваш результат
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-
-              {/* Отдельная карточка для текущего пользователя, если его нет в топ-3 */}
-              {!currentUserInTop3 && currentUserCard && (
-                <div className="relative bg-white/70 backdrop-blur-sm rounded-lg shadow-md/50 overflow-hidden border-2 border-green-400">
-                  <div className="h-1 bg-gradient-to-r from-green-400 to-green-600"></div>
-                  <div className="p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <Medal rank={currentUserCard.rank} size="medium" />
-                        <div>
-                          <h3 className="text-sm font-semibold text-gray-800">
-                            {currentUserCard.managerName}{" "}
-                            <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded">
-                              ✨ Вы
-                            </span>
-                          </h3>
-                          <p className="text-xs text-gray-500">
-                            {currentUserCard.officeName}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-base font-bold text-gray-800">
-                          ${formatNumber(currentUserCard.totalCommissionUSD)}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {currentUserCard.contractCount}{" "}
-                          {contractWord(currentUserCard.contractCount)}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div className="text-xs">
-                        <span className="text-green-600 font-medium">
-                          📈 Вперед к цели!
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Остальные участники - компактная таблица */}
-          {combinedLeaderboard && combinedLeaderboard.length > 3 && (
-            <div className="bg-white/70 backdrop-blur-sm rounded-lg shadow-md/50 overflow-hidden">
-              <div className="bg-gray-50/80 backdrop-blur-sm px-3 py-2 border-b border-gray-200/60">
-                <h3 className="text-sm font-semibold text-gray-700">
-                  📋 Остальные менеджеры
-                </h3>
+            <div className="bg-white/40 backdrop-blur-sm border border-gray-200/60 rounded-lg overflow-hidden">
+              <div className="px-3 py-2 bg-gray-50/50 backdrop-blur-sm border-b border-gray-200/50 flex justify-between items-center">
+                <p className="text-xs text-black">
+                  {selectedMonth
+                    .toLocaleDateString("ru-RU", {
+                      month: "long",
+                      year: "numeric",
+                    })
+                    .charAt(0)
+                    .toUpperCase() +
+                    selectedMonth
+                      .toLocaleDateString("ru-RU", {
+                        month: "long",
+                        year: "numeric",
+                      })
+                      .slice(1)}
+                </p>
+                <p className="text-xs text-black">
+                  {combinedLeaderboard.length} менеджеров
+                </p>
               </div>
-              <div className="divide-y divide-gray-100/60">
-                {combinedLeaderboard
-                  .slice(3)
-                  .map((manager: LeaderboardManagerData) => (
-                    <div
-                      key={manager.managerId}
-                      className={`px-3 py-2 ${
-                        manager.isCurrentUser
-                          ? "bg-green-50/70 backdrop-blur-sm"
-                          : ""
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Medal rank={manager.rank} size="small" />
-                          <div>
-                            <div className="flex items-center gap-1">
-                              <span className="text-sm font-medium text-gray-900">
-                                {manager.managerName}
-                              </span>
-                              {manager.isCurrentUser && (
-                                <span className="text-xs font-medium text-green-600 bg-green-50 px-1.5 py-0.5 rounded">
-                                  Вы
+              <div className="divide-y divide-gray-100/50">
+                {(() => {
+                  const sortedVisible = [...visibleLeaderboard].sort(
+                    (a, b) => a.rank - b.rank
+                  );
+                  const elements = [];
+
+                  for (let i = 0; i < sortedVisible.length; i++) {
+                    const manager = sortedVisible[i];
+
+                    // Добавляем многоточие перед текущим элементом, если есть разрыв
+                    if (i > 0 && manager.rank > sortedVisible[i - 1].rank + 1) {
+                      elements.push(
+                        <div
+                          key={`gap-${manager.rank}`}
+                          className="flex justify-center items-start"
+                        >
+                          <span className="text-4xl text-gray-400 mt-[-26px]">
+                            ...
+                          </span>
+                        </div>
+                      );
+                    }
+
+                    // Добавляем карточку менеджера
+                    elements.push(
+                      <div
+                        key={manager.managerId}
+                        className={`px-3 py-2 ${
+                          manager.isCurrentUser
+                            ? "bg-gray-50/50 backdrop-blur-sm"
+                            : manager.rank <= 3
+                            ? ""
+                            : ""
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Medal rank={manager.rank} size="small" />
+                            <div>
+                              <div className="flex items-center gap-1">
+                                <span
+                                  className={`text-sm ${
+                                    manager.rank <= 3
+                                      ? "font-semibold text-gray-900"
+                                      : "text-gray-900"
+                                  }`}
+                                >
+                                  {manager.managerName}
                                 </span>
-                              )}
+                                {manager.isCurrentUser && (
+                                  <span className="text-xs text-blue-600">
+                                    (Вы)
+                                  </span>
+                                )}
+                                {manager.rank <= 3 && (
+                                  <span className="text-xs font-medium text-blue-600">
+                                    {manager.rank === 1
+                                      ? "🥇"
+                                      : manager.rank === 2
+                                      ? "🥈"
+                                      : "🥉"}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-500">
+                                {manager.officeName}
+                              </p>
                             </div>
+                          </div>
+                          <div className="text-right">
+                            <p
+                              className={`text-sm ${
+                                manager.rank <= 3
+                                  ? "font-semibold text-gray-900"
+                                  : "text-gray-900"
+                              }`}
+                            >
+                              ${formatNumber(manager.totalCommissionUSD)}
+                            </p>
                             <p className="text-xs text-gray-500">
-                              {manager.officeName}
+                              {manager.contractCount}{" "}
+                              {contractWord(manager.contractCount)}
                             </p>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-sm font-semibold text-green-600">
-                            ${formatNumber(manager.totalCommissionUSD)}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {manager.contractCount}{" "}
-                            {contractWord(manager.contractCount)}
-                          </p>
-                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  }
+
+                  // Добавляем многоточие в конце, если есть участники ниже последнего видимого
+                  const lastVisibleRank =
+                    sortedVisible[sortedVisible.length - 1]?.rank;
+                  if (
+                    lastVisibleRank &&
+                    lastVisibleRank < combinedLeaderboard.length
+                  ) {
+                    elements.push(
+                      <div
+                        key="gap-end"
+                        className="flex justify-center items-start"
+                      >
+                        <span className="text-4xl text-gray-400 mt-[-26px]">
+                          ...
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  return elements;
+                })()}
               </div>
+            </div>
+          )}
+
+          {/* Кнопка показа полного списка */}
+          {!showFullList &&
+            !currentUserInTop3 &&
+            currentUserId &&
+            combinedLeaderboard &&
+            visibleLeaderboard &&
+            visibleLeaderboard.length < combinedLeaderboard.length && (
+              <div className="mt-2 text-center">
+                <button
+                  onClick={() => setShowFullList(true)}
+                  className="text-xs text-gray-500 hover:text-gray-700 bg-gray-100/50 py-1 px-3 rounded-2xl duration-300 hover:bg-gray-200/50 
+                  font-medium"
+                >
+                  Показать всех ({combinedLeaderboard.length})
+                </button>
+              </div>
+            )}
+
+          {/* Кнопка скрытия списка */}
+          {showFullList && !currentUserInTop3 && currentUserId && (
+            <div className="mt-2 text-center">
+              <button
+                onClick={() => setShowFullList(false)}
+                className="text-xs text-gray-600 hover:text-gray-800 font-medium"
+              >
+                Скрыть часть менеджеров
+              </button>
             </div>
           )}
 
@@ -590,12 +537,13 @@ function App() {
       />
 
       {currentUserNickname && (
-        <div className="flex justify-center pb-2">
+        <div className="flex justify-center mt-1 pb-3">
           <button
             onClick={handleLogout}
-            className="text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 px-2 py-0.5 rounded transition-colors"
+            className="text-xs text-gray-500 hover:text-gray-700 bg-gray-100/50 py-1 px-3 rounded-2xl duration-300 hover:bg-gray-200/50
+            font-medium"
           >
-            🚪 Выйти ({currentUserNickname})
+            Выйти ({currentUserNickname})
           </button>
         </div>
       )}

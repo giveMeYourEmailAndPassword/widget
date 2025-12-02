@@ -55,21 +55,20 @@ export const MonthCalendar: React.FC<MonthCalendarProps> = ({
   };
 
   return (
-    <div className="bg-white/80 rounded-lg shadow-md overflow-hidden">
+    <div className="bg-white/50 rounded-lg shadow-md overflow-hidden">
       <div
         className="p-3 cursor-pointer flex items-center justify-between"
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <div>
-          <div className="text-xs text-gray-500">Период данных</div>
-          <div className="text-sm font-semibold text-gray-800">
-            {getMonthDisplayName(selectedDate)} {selectedDate.getFullYear()}
-          </div>
           {isCurrentMonth() && (
             <div className="text-xs text-green-600 font-medium">
               Текущий месяц
             </div>
           )}
+          <div className="text-sm font-semibold text-gray-800">
+            {getMonthDisplayName(selectedDate)} {selectedDate.getFullYear()}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {isLoading && (
