@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import pb from "../pocketbase";
-import { Contract, ExchangeRates, User, LeaderboardOfficeData } from "../types";
+import { Contract, ExchangeRates, ExchangeRateData, User } from "../types";
 import { formatPbDate } from "../lib/utils";
 
 // Функция для получения курсов валют
@@ -101,7 +101,7 @@ export const useUser = () => {
         expand: "office",
       });
 
-      return user as User;
+      return user as unknown as User;
     },
     staleTime: 10 * 60 * 1000, // 10 минут кэширования
     enabled: pb.authStore.isValid,
@@ -123,11 +123,11 @@ export const findUserByNickname = async (nickname: string): Promise<User | null>
     // Если точное совпадение найдено, возвращаем его
     const exactMatch = users.items.find(user => user.name.toLowerCase() === nickname.toLowerCase());
     if (exactMatch) {
-      return exactMatch as User;
+      return exactMatch as unknown as User;
     }
 
     // Иначе возвращаем первый подходящий
-    return users.items[0] as User;
+    return users.items[0] as unknown as User;
   } catch (error) {
     console.error("Error finding user by nickname:", error);
     return null;

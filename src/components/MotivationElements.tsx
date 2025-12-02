@@ -9,9 +9,6 @@ interface MotivationElementsProps {
 
 export const MotivationElements: React.FC<MotivationElementsProps> = ({
   rank,
-  totalCommissionUSD,
-  contractCount,
-  isCurrentUser,
 }) => {
   const getMotivationalMessage = (rank: number) => {
     switch (rank) {

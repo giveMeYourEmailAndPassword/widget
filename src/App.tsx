@@ -72,11 +72,11 @@ function App() {
     startDate, // Начало текущего месяца
     endDate, // Сегодня
     undefined, // Показываем всех менеджеров без фильтра по офису
-    currentUserId // ID текущего пользователя для подсветки
+    currentUserId || undefined // ID текущего пользователя для подсветки
   );
 
   // Получаем статистику текущего пользователя
-  const { data: currentUserStats, isLoading: userStatsLoading } = useUserStats(
+  const { data: currentUserStats } = useUserStats(
     currentUserId || "",
     startDate,
     endDate,
@@ -386,7 +386,7 @@ function App() {
           {/* Топ-3 карточки - вертикальные */}
           {combinedLeaderboard && combinedLeaderboard.length > 0 && (
             <div className="space-y-2 mb-4">
-              {combinedLeaderboard.slice(0, 3).map((manager, index) => (
+              {combinedLeaderboard.slice(0, 3).map((manager) => (
                 <div
                   key={manager.managerId}
                   className={`relative bg-white/70 backdrop-blur-sm rounded-lg shadow-md/50 overflow-hidden border ${
