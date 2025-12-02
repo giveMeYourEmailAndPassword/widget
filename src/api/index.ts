@@ -108,6 +108,32 @@ export const useUser = () => {
   });
 };
 
+// Функция для поиска пользователя по нику
+export const findUserByNickname = async (nickname: string): Promise<User | null> => {
+  try {
+    const users = await pb.collection("users").getList(1, 50, {
+      filter: `name ~ "${nickname}"`,
+      expand: "office",
+    });
+
+    if (users.items.length === 0) {
+      return null;
+    }
+
+    // Если точное совпадение найдено, возвращаем его
+    const exactMatch = users.items.find(user => user.name.toLowerCase() === nickname.toLowerCase());
+    if (exactMatch) {
+      return exactMatch as User;
+    }
+
+    // Иначе возвращаем первый подходящий
+    return users.items[0] as User;
+  } catch (error) {
+    console.error("Error finding user by nickname:", error);
+    return null;
+  }
+};
+
 // Вспомогательная функция для получения контрактов
 const fetchContractsForLeaderboard = async (
   startDate: Date,
@@ -138,7 +164,8 @@ const fetchContractsForLeaderboard = async (
 export const useManagersLeaderboard = (
   startDate: Date,
   endDate: Date,
-  officeId?: string
+  officeId?: string,
+  currentUserId?: string
 ) => {
   // Сначала получаем курсы валют
   const { data: rates, isLoading: ratesLoading } = useExchangeRates();
@@ -212,7 +239,7 @@ export const useManagersLeaderboard = (
       .map((manager, index) => ({
         ...manager,
         rank: index + 1,
-        isCurrentUser: false,
+        isCurrentUser: currentUserId ? manager.managerId === currentUserId : false,
       }));
 
     // Если данных нет и это текущий месяц (1-3 дня), возвращаем заглушку
@@ -291,5 +318,95 @@ export const useManagersLeaderboard = (
     data: leaderboard,
     isLoading: ratesLoading || contractsLoading,
     error: contractsError,
+  };
+};
+
+// Хук для получения данных конкретного пользователя для периода
+export const useUserStats = (
+  userId: string,
+  startDate: Date,
+  endDate: Date,
+  userName?: string,
+  userOfficeName?: string
+) => {
+  const { data: rates, isLoading: ratesLoading } = useExchangeRates();
+
+  const {
+    data: userStats,
+    isLoading: userStatsLoading,
+    error: userStatsError,
+  } = useQuery({
+    queryKey: [
+      "userStats",
+      userId,
+      startDate.getTime(),
+      endDate.getTime(),
+    ],
+    queryFn: async () => {
+      if (!userId || !rates) return {
+        managerId: userId,
+        managerName: userName || "Пользователь",
+        officeName: userOfficeName || "Без офиса",
+        totalCommissionUSD: 0,
+        contractCount: 0,
+        rank: 0,
+        isCurrentUser: true,
+      };
+
+      const startPbFormat = formatPbDate(startDate);
+      const endPbFormat = formatPbDate(endDate);
+
+      const filter = `created >= "${startPbFormat}" && created <= "${endPbFormat}" && is_deleted = false && created_by = "${userId}"`;
+
+      const contracts = await pb
+        .collection("contracts")
+        .getList<Contract>(1, 1000, {
+          expand: "created_by,created_by.office",
+          filter,
+        });
+
+      let totalCommissionUSD = 0;
+      let contractCount = 0;
+      let foundUser = null;
+      let foundOfficeName = userOfficeName || "Без офиса";
+
+      if (contracts.items.length > 0) {
+        contracts.items.forEach((contract) => {
+          if (contract.netto_price == null || contract.netto_price <= 0) {
+            return;
+          }
+
+          const commissionInCurrencies = getCommissionInCurrencies(contract, rates);
+          totalCommissionUSD += commissionInCurrencies.USD;
+          contractCount += 1;
+        });
+
+        foundUser = contracts.items[0]?.expand?.created_by;
+        foundOfficeName = contracts.items[0]?.expand?.["created_by.office"]?.name || userOfficeName || "Без офиса";
+      }
+
+      // Всегда возвращаем данные пользователя, даже если нет контрактов
+      return {
+        managerId: userId,
+        managerName: foundUser?.name || userName || "Пользователь",
+        officeName: foundOfficeName,
+        totalCommissionUSD,
+        contractCount,
+        rank: 0, // Будет вычислено позже
+        isCurrentUser: true,
+      };
+    },
+    enabled: !!userId && !!rates,
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+    retryDelay: 2000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+
+  return {
+    data: userStats,
+    isLoading: ratesLoading || userStatsLoading,
+    error: userStatsError,
   };
 };

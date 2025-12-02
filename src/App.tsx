@@ -1,14 +1,40 @@
 import "./App.css";
 import { useEffect, useState, useMemo } from "react";
-import { useManagersLeaderboard } from "./api";
+import {
+  useManagersLeaderboard,
+  useUserStats,
+  findUserByNickname,
+} from "./api";
 import { loginToPocketBase } from "./pocketbase";
 import { LeaderboardManagerData } from "./types";
-import { formatNumber, contractWord } from "./lib/utils";
+import {
+  formatNumber,
+  contractWord,
+  getUserNickname,
+  saveUserNickname,
+  saveUserId,
+  getUserId,
+  clearUserData,
+} from "./lib/utils";
 import { Medal } from "./components/Medal";
 import { MonthCalendar } from "./components/MonthCalendar";
+import { AuthModal } from "./components/AuthModal";
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserNickname, setCurrentUserNickname] = useState<string | null>(
+    null
+  );
+  const [currentUserOfficeName, setCurrentUserOfficeName] = useState<
+    string | null
+  >(null);
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [notification, setNotification] = useState<{
+    type: "warning" | "info" | "error";
+    message: string;
+  } | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -43,23 +69,159 @@ function App() {
   } = useManagersLeaderboard(
     startDate, // Начало текущего месяца
     endDate, // Сегодня
-    undefined // Показываем всех менеджеров без фильтра по офису
+    undefined, // Показываем всех менеджеров без фильтра по офису
+    currentUserId // ID текущего пользователя для подсветки
   );
+
+  // Получаем статистику текущего пользователя
+  const { data: currentUserStats, isLoading: userStatsLoading } = useUserStats(
+    currentUserId || "",
+    startDate,
+    endDate,
+    currentUserNickname || undefined,
+    currentUserOfficeName || undefined
+  );
+
+  // Комбинированный лидерборд с пользователем
+  const combinedLeaderboard = useMemo(() => {
+    if (!managersLeaderboard) return [];
+
+    // Если у пользователя есть данные, добавляем его в рейтинг
+    if (currentUserId && currentUserStats) {
+      // Создаем новый массив с пользователем
+      const allManagers = [...managersLeaderboard, currentUserStats];
+
+      // Убираем дубликаты пользователя (если он уже есть в лидерборде)
+      const uniqueManagers = allManagers.filter(
+        (manager, index, self) =>
+          index === self.findIndex((m) => m.managerId === manager.managerId)
+      );
+
+      // Сортируем по убыванию комиссии
+      const sorted = uniqueManagers.sort(
+        (a, b) => b.totalCommissionUSD - a.totalCommissionUSD
+      );
+
+      // Переназначаем ранги
+      return sorted.map((manager, index) => ({
+        ...manager,
+        rank: index + 1,
+        isCurrentUser: manager.managerId === currentUserId,
+      }));
+    }
+
+    // Если пользователя нет в системе, показываем обычный лидерборд
+    return managersLeaderboard;
+  }, [managersLeaderboard, currentUserStats, currentUserId]);
 
   // Автоматический вход при загрузке приложения
   useEffect(() => {
-    const handleLogin = async () => {
+    const initializeApp = async () => {
       try {
         await loginToPocketBase();
         setIsLoggedIn(true);
+
+        // Проверяем, есть ли сохраненные данные пользователя
+        const savedNickname = getUserNickname();
+        const savedUserId = getUserId();
+
+        if (savedNickname && savedUserId) {
+          setCurrentUserNickname(savedNickname);
+          setCurrentUserId(savedUserId);
+        } else {
+          // Если нет сохраненных данных, показываем модальное окно
+          setIsAuthModalOpen(true);
+        }
       } catch (error) {
         console.error("Login error:", error);
         setIsLoggedIn(false);
       }
     };
 
-    handleLogin();
+    initializeApp();
   }, []);
+
+  // Обработчик отправки ника
+  const handleNicknameSubmit = async (nickname: string) => {
+    setIsAuthenticating(true);
+    try {
+      const user = await findUserByNickname(nickname);
+      if (user) {
+        // Пользователь найден в системе
+        setCurrentUserNickname(user.name);
+        setCurrentUserId(user.id);
+        setCurrentUserOfficeName(user.expand?.office?.name || "Без офиса");
+        saveUserNickname(user.name);
+        saveUserId(user.id);
+
+        // Сбрасываем скролл наверх
+        window.scrollTo(0, 0);
+
+        setIsAuthModalOpen(false);
+      } else {
+        // Пользователь не найден, но впускаем его
+        const tempId = `temp-${Date.now()}`;
+        setCurrentUserNickname(nickname);
+        setCurrentUserId(tempId);
+        setCurrentUserOfficeName("Без офиса");
+        saveUserNickname(nickname);
+        saveUserId(tempId);
+
+        // Сбрасываем скролл наверх
+        window.scrollTo(0, 0);
+
+        setIsAuthModalOpen(false);
+
+        // Показываем уведомление о том, что пользователь не найден
+        setNotification({
+          type: "warning",
+          message: `Профиль "${nickname}" не найден в системе. Возможно, у вас пока нет контрактов или ник указан неверно.`,
+        });
+      }
+    } catch (error) {
+      console.error("Error finding user:", error);
+      // Даже при ошибке впускаем пользователя
+      const tempId = `temp-${Date.now()}`;
+      setCurrentUserNickname(nickname);
+      setCurrentUserId(tempId);
+      setCurrentUserOfficeName("Без офиса");
+      saveUserNickname(nickname);
+      saveUserId(tempId);
+
+      // Сбрасываем скролл наверх
+      window.scrollTo(0, 0);
+
+      setIsAuthModalOpen(false);
+
+      // Показываем уведомление об ошибке
+      setNotification({
+        type: "error",
+        message:
+          "Произошла ошибка при поиске пользователя. Вы вошли как гость.",
+      });
+    } finally {
+      setIsAuthenticating(false);
+    }
+  };
+
+  // Обработчик выхода
+  const handleLogout = () => {
+    clearUserData();
+    setCurrentUserId(null);
+    setCurrentUserNickname(null);
+    setCurrentUserOfficeName(null);
+    setIsAuthModalOpen(true);
+  };
+
+  // Автоматическое скрытие уведомления через 5 секунд
+  useEffect(() => {
+    if (notification) {
+      const timer = setTimeout(() => {
+        setNotification(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [notification]);
 
   // Показываем загрузку во время входа
   if (!isLoggedIn || managersLoading) {
@@ -104,16 +266,71 @@ function App() {
               </p>
               <p className="text-xs text-gray-500">•</p>
               <p className="text-xs font-bold text-gray-800">
-                {managersLeaderboard.length}
+                {combinedLeaderboard.length}
               </p>
               <p className="text-xs text-gray-500">менеджеров</p>
+              {currentUserNickname && (
+                <>
+                  <p className="text-xs text-gray-500">•</p>
+                  <button
+                    onClick={handleLogout}
+                    className="text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 px-2 py-0.5 rounded transition-colors"
+                  >
+                    🚪 Выйти ({currentUserNickname})
+                  </button>
+                </>
+              )}
             </div>
           </div>
+
+          {/* Уведомление пользователю */}
+          {notification && (
+            <div
+              className={`mb-3 p-2 backdrop-blur-sm border rounded-lg ${
+                notification.type === "warning"
+                  ? "bg-yellow-50/80 border-yellow-200/60"
+                  : notification.type === "error"
+                  ? "bg-red-50/80 border-red-200/60"
+                  : "bg-blue-50/80 border-blue-200/60"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">
+                    {notification.type === "warning"
+                      ? "⚠️"
+                      : notification.type === "error"
+                      ? "❌"
+                      : "ℹ️"}
+                  </span>
+                  <div>
+                    <p
+                      className={`text-xs font-medium ${
+                        notification.type === "warning"
+                          ? "text-yellow-800"
+                          : notification.type === "error"
+                          ? "text-red-800"
+                          : "text-blue-800"
+                      }`}
+                    >
+                      {notification.message}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setNotification(null)}
+                  className="text-xs font-medium text-gray-500 hover:text-gray-700"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
 
           {new Date().getDate() <= 3 &&
             selectedMonth.getMonth() === new Date().getMonth() &&
             selectedMonth.getFullYear() === new Date().getFullYear() &&
-            managersLeaderboard.some((m) =>
+            combinedLeaderboard.some((m) =>
               m.managerId.startsWith("mock-")
             ) && (
               <div className="mb-3 p-2 bg-gradient-to-r from-yellow-50/80 to-orange-50/80 backdrop-blur-sm border border-yellow-200/60 rounded-lg">
@@ -128,8 +345,8 @@ function App() {
               </div>
             )}
 
-          {!managersLeaderboard.some((m) => m.managerId.startsWith("mock-")) &&
-            managersLeaderboard.length === 0 && (
+          {!combinedLeaderboard.some((m) => m.managerId.startsWith("mock-")) &&
+            combinedLeaderboard.length === 0 && (
               <div className="mb-3 p-2 bg-gray-50/80 backdrop-blur-sm border border-gray-200/60 rounded-lg">
                 <div className="flex items-center gap-2">
                   <span className="text-base">📋</span>
@@ -143,9 +360,9 @@ function App() {
             )}
 
           {/* Топ-3 карточки - вертикальные */}
-          {managersLeaderboard && managersLeaderboard.length > 0 && (
+          {combinedLeaderboard && combinedLeaderboard.length > 0 && (
             <div className="space-y-2 mb-4">
-              {managersLeaderboard.slice(0, 3).map((manager, index) => (
+              {combinedLeaderboard.slice(0, 3).map((manager, index) => (
                 <div
                   key={manager.managerId}
                   className={`relative bg-white/70 backdrop-blur-sm rounded-lg shadow-md/50 overflow-hidden border ${
@@ -153,7 +370,11 @@ function App() {
                       ? "border-yellow-400 border-2"
                       : manager.rank === 2
                       ? "border-gray-300"
-                      : "border-orange-300"
+                      : manager.rank === 3
+                      ? "border-orange-300"
+                      : manager.isCurrentUser
+                      ? "border-green-400 border-2"
+                      : "border-gray-200"
                   }`}
                 >
                   <div
@@ -162,7 +383,11 @@ function App() {
                         ? "from-yellow-400 to-yellow-600"
                         : manager.rank === 2
                         ? "from-gray-300 to-gray-500"
-                        : "from-orange-300 to-orange-500"
+                        : manager.rank === 3
+                        ? "from-orange-300 to-orange-500"
+                        : manager.isCurrentUser
+                        ? "from-green-400 to-green-600"
+                        : "from-gray-200 to-gray-400"
                     }`}
                   ></div>
 
@@ -172,7 +397,12 @@ function App() {
                         <Medal rank={manager.rank} size="medium" />
                         <div>
                           <h3 className="text-sm font-semibold text-gray-800">
-                            {manager.managerName}
+                            {manager.managerName}{" "}
+                            {manager.isCurrentUser && (
+                              <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded">
+                                ✨ Вы
+                              </span>
+                            )}
                           </h3>
                           <p className="text-xs text-gray-500">
                             {manager.officeName}
@@ -184,7 +414,8 @@ function App() {
                           ${formatNumber(manager.totalCommissionUSD)}
                         </p>
                         <p className="text-xs text-gray-500">
-                          {manager.contractCount} {contractWord(manager.contractCount)}
+                          {manager.contractCount}{" "}
+                          {contractWord(manager.contractCount)}
                         </p>
                       </div>
                     </div>
@@ -206,12 +437,12 @@ function App() {
                             🎯 Отлично
                           </span>
                         )}
+                        {manager.isCurrentUser && manager.rank > 3 && (
+                          <span className="text-green-600 font-medium">
+                            📊 Ваш результат
+                          </span>
+                        )}
                       </div>
-                      {manager.isCurrentUser && (
-                        <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded">
-                          ✨ Вы
-                        </span>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -220,7 +451,7 @@ function App() {
           )}
 
           {/* Остальные участники - компактная таблица */}
-          {managersLeaderboard && managersLeaderboard.length > 3 && (
+          {combinedLeaderboard && combinedLeaderboard.length > 3 && (
             <div className="bg-white/70 backdrop-blur-sm rounded-lg shadow-md/50 overflow-hidden">
               <div className="bg-gray-50/80 backdrop-blur-sm px-3 py-2 border-b border-gray-200/60">
                 <h3 className="text-sm font-semibold text-gray-700">
@@ -228,7 +459,7 @@ function App() {
                 </h3>
               </div>
               <div className="divide-y divide-gray-100/60">
-                {managersLeaderboard
+                {combinedLeaderboard
                   .slice(3)
                   .map((manager: LeaderboardManagerData) => (
                     <div
@@ -263,7 +494,8 @@ function App() {
                             ${formatNumber(manager.totalCommissionUSD)}
                           </p>
                           <p className="text-xs text-gray-500">
-                            {manager.contractCount} {contractWord(manager.contractCount)}
+                            {manager.contractCount}{" "}
+                            {contractWord(manager.contractCount)}
                           </p>
                         </div>
                       </div>
@@ -283,6 +515,13 @@ function App() {
           </div>
         </div>
       </main>
+
+      {/* Модальное окно авторизации */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onSubmit={handleNicknameSubmit}
+        isLoading={isAuthenticating}
+      />
     </div>
   );
 }

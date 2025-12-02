@@ -45,3 +45,30 @@ export const contractWord = (count: number): string => {
   // 5, 6, 7, 8, 9, 0 контрактов
   return 'контрактов';
 };
+
+// Работа с локальным хранилищем для авторизации
+export const storageKeys = {
+  USER_NICKNAME: 'widget_user_nickname',
+  USER_ID: 'widget_user_id'
+} as const;
+
+export const saveUserNickname = (nickname: string): void => {
+  localStorage.setItem(storageKeys.USER_NICKNAME, nickname);
+};
+
+export const getUserNickname = (): string | null => {
+  return localStorage.getItem(storageKeys.USER_NICKNAME);
+};
+
+export const saveUserId = (userId: string): void => {
+  localStorage.setItem(storageKeys.USER_ID, userId);
+};
+
+export const getUserId = (): string | null => {
+  return localStorage.getItem(storageKeys.USER_ID);
+};
+
+export const clearUserData = (): void => {
+  localStorage.removeItem(storageKeys.USER_NICKNAME);
+  localStorage.removeItem(storageKeys.USER_ID);
+};
