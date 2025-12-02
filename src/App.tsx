@@ -15,6 +15,8 @@ import {
   saveUserId,
   getUserId,
   clearUserData,
+  getUserOfficeName,
+  saveUserOfficeName,
 } from "./lib/utils";
 import { Medal } from "./components/Medal";
 import { MonthCalendar } from "./components/MonthCalendar";
@@ -114,6 +116,31 @@ function App() {
     return managersLeaderboard;
   }, [managersLeaderboard, currentUserStats, currentUserId]);
 
+  // Определяем, есть ли текущий пользователь в топ-3
+  const currentUserInTop3 = useMemo(() => {
+    if (!combinedLeaderboard || !currentUserId) return false;
+    return combinedLeaderboard
+      .slice(0, 3)
+      .some((manager) => manager.isCurrentUser);
+  }, [combinedLeaderboard, currentUserId]);
+
+  // Получаем данные текущего пользователя для отдельной карточки
+  const currentUserCard = useMemo(() => {
+    if (!currentUserInTop3 && currentUserId && currentUserStats) {
+      const userInLeaderboard = combinedLeaderboard.find(
+        (m) => m.isCurrentUser
+      );
+      if (userInLeaderboard) {
+        return {
+          ...userInLeaderboard,
+          rank: userInLeaderboard.rank,
+          isCurrentUser: true,
+        };
+      }
+    }
+    return null;
+  }, [currentUserInTop3, currentUserId, currentUserStats, combinedLeaderboard]);
+
   // Автоматический вход при загрузке приложения
   useEffect(() => {
     const initializeApp = async () => {
@@ -126,8 +153,10 @@ function App() {
         const savedUserId = getUserId();
 
         if (savedNickname && savedUserId) {
+          const savedOfficeName = getUserOfficeName();
           setCurrentUserNickname(savedNickname);
           setCurrentUserId(savedUserId);
+          setCurrentUserOfficeName(savedOfficeName);
         } else {
           // Если нет сохраненных данных, показываем модальное окно
           setIsAuthModalOpen(true);
@@ -148,11 +177,13 @@ function App() {
       const user = await findUserByNickname(nickname);
       if (user) {
         // Пользователь найден в системе
+        const officeName = user.expand?.office?.name || "Без офиса";
         setCurrentUserNickname(user.name);
         setCurrentUserId(user.id);
-        setCurrentUserOfficeName(user.expand?.office?.name || "Без офиса");
+        setCurrentUserOfficeName(officeName);
         saveUserNickname(user.name);
         saveUserId(user.id);
+        saveUserOfficeName(officeName);
 
         // Сбрасываем скролл наверх
         window.scrollTo(0, 0);
@@ -161,11 +192,13 @@ function App() {
       } else {
         // Пользователь не найден, но впускаем его
         const tempId = `temp-${Date.now()}`;
+        const officeName = "Без офиса";
         setCurrentUserNickname(nickname);
         setCurrentUserId(tempId);
-        setCurrentUserOfficeName("Без офиса");
+        setCurrentUserOfficeName(officeName);
         saveUserNickname(nickname);
         saveUserId(tempId);
+        saveUserOfficeName(officeName);
 
         // Сбрасываем скролл наверх
         window.scrollTo(0, 0);
@@ -182,11 +215,13 @@ function App() {
       console.error("Error finding user:", error);
       // Даже при ошибке впускаем пользователя
       const tempId = `temp-${Date.now()}`;
+      const officeName = "Без офиса";
       setCurrentUserNickname(nickname);
       setCurrentUserId(tempId);
-      setCurrentUserOfficeName("Без офиса");
+      setCurrentUserOfficeName(officeName);
       saveUserNickname(nickname);
       saveUserId(tempId);
+      saveUserOfficeName(officeName);
 
       // Сбрасываем скролл наверх
       window.scrollTo(0, 0);
@@ -269,17 +304,6 @@ function App() {
                 {combinedLeaderboard.length}
               </p>
               <p className="text-xs text-gray-500">менеджеров</p>
-              {currentUserNickname && (
-                <>
-                  <p className="text-xs text-gray-500">•</p>
-                  <button
-                    onClick={handleLogout}
-                    className="text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 px-2 py-0.5 rounded transition-colors"
-                  >
-                    🚪 Выйти ({currentUserNickname})
-                  </button>
-                </>
-              )}
             </div>
           </div>
 
@@ -447,6 +471,48 @@ function App() {
                   </div>
                 </div>
               ))}
+
+              {/* Отдельная карточка для текущего пользователя, если его нет в топ-3 */}
+              {!currentUserInTop3 && currentUserCard && (
+                <div className="relative bg-white/70 backdrop-blur-sm rounded-lg shadow-md/50 overflow-hidden border-2 border-green-400">
+                  <div className="h-1 bg-gradient-to-r from-green-400 to-green-600"></div>
+                  <div className="p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <Medal rank={currentUserCard.rank} size="medium" />
+                        <div>
+                          <h3 className="text-sm font-semibold text-gray-800">
+                            {currentUserCard.managerName}{" "}
+                            <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded">
+                              ✨ Вы
+                            </span>
+                          </h3>
+                          <p className="text-xs text-gray-500">
+                            {currentUserCard.officeName}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-base font-bold text-gray-800">
+                          ${formatNumber(currentUserCard.totalCommissionUSD)}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {currentUserCard.contractCount}{" "}
+                          {contractWord(currentUserCard.contractCount)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs">
+                        <span className="text-green-600 font-medium">
+                          📈 Вперед к цели!
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -522,6 +588,17 @@ function App() {
         onSubmit={handleNicknameSubmit}
         isLoading={isAuthenticating}
       />
+
+      {currentUserNickname && (
+        <div className="flex justify-center pb-2">
+          <button
+            onClick={handleLogout}
+            className="text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 px-2 py-0.5 rounded transition-colors"
+          >
+            🚪 Выйти ({currentUserNickname})
+          </button>
+        </div>
+      )}
     </div>
   );
 }
